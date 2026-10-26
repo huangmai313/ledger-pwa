@@ -47,10 +47,17 @@ function ensureStructure(raw) {
   if (!raw.incomes) raw.incomes = [];
   if (!raw.budgets) raw.budgets = [];
   if (!raw.reconciles) raw.reconciles = [];
+  // categories：活类别数组
   if (!raw.categories) raw.categories = { income: [...DEFAULT_INCOME_CATS], budget: [...DEFAULT_BUDGET_CATS] };
   else {
     if (!raw.categories.income) raw.categories.income = [...DEFAULT_INCOME_CATS];
     if (!raw.categories.budget) raw.categories.budget = [...DEFAULT_BUDGET_CATS];
+  }
+  // deletedCategories：墓碑！记录被删的类别（含时间戳，用于跨端传播删除）
+  if (!raw.deletedCategories) raw.deletedCategories = { income: [], budget: [] };
+  else {
+    if (!raw.deletedCategories.income) raw.deletedCategories.income = [];
+    if (!raw.deletedCategories.budget) raw.deletedCategories.budget = [];
   }
   return raw;
 }
@@ -239,31 +246,42 @@ export function fmtMoney(n) {
 // ============ 类别管理 ============
 // type: 'income' | 'budget'
 export function getCategories(type) {
-  return loadAll().categories[type] || [];
+  const data = loadAll();
+  const cats = data.categories[type] || [];
+  const tombstoneNames = new Set((data.deletedCategories[type] || []).map(t => t.name));
+  // 过滤掉墓碑里的类别名
+  return cats.filter(c => !tombstoneNames.has(c));
 }
 export function isInCategory(type, name) {
-  const cats = getCategories(type);
-  return cats.includes(name);
+  return getCategories(type).includes(name);
 }
 export function addCategory(type, name) {
   name = name.trim();
   if (!name) return false;
   const data = loadAll();
+  // 从墓碑里清掉（允许重新加回来）
+  data.deletedCategories[type] = data.deletedCategories[type].filter(t => t.name !== name);
   if (!data.categories[type].includes(name)) {
     data.categories[type].push(name);
     saveAll(data);
+  } else {
+    saveAll(data); // 墓碑变了也要存
   }
   return true;
 }
 export function deleteCategory(type, name) {
   const data = loadAll();
+  // 从活数组移除
   data.categories[type] = data.categories[type].filter(c => c !== name);
+  // 写入墓碑（带时间戳，供 gist merge 判断）
+  if (!data.deletedCategories[type].some(t => t.name === name)) {
+    data.deletedCategories[type].push({ name, deletedAt: Date.now() });
+  }
   saveAll(data);
 }
 // 自动把新类别加入 categories（保存时调用）
 export function autoAddCategory(type, name) {
-  const cats = getCategories(type);
-  if (name && !cats.includes(name)) {
+  if (name && !isInCategory(type, name)) {
     addCategory(type, name);
   }
 }

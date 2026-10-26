@@ -17,50 +17,74 @@ function setStatus(status) {
 }
 
 // ============ 合并函数 ============
-// 双向合并：对三个数组按 id 去重合并，同 id 取 updatedAt 更大者
+// 双向合并：数组按 id 去重；类别用墓碑机制防止已删类别复活
 function mergeData(local, remote) {
   const merged = {};
   merged.incomes = mergeArray(local.incomes || [], remote.incomes || []);
   merged.budgets = mergeArray(local.budgets || [], remote.budgets || []);
   merged.reconciles = mergeArray(local.reconciles || [], remote.reconciles || []);
-  // categories：取双方合集（远程可能有新类别）
-  merged.categories = mergeCategories(local.categories, remote.categories);
+  // 先合并墓碑（双方的删除记录都要保留，避免被重新加回来）
+  merged.deletedCategories = mergeTombstones(
+    local.deletedCategories || { income: [], budget: [] },
+    remote.deletedCategories || { income: [], budget: [] }
+  );
+  // categories：先并集，再用墓碑过滤掉已删的类别
+  merged.categories = mergeCategoriesWithTombstone(
+    local.categories, remote.categories, merged.deletedCategories
+  );
   return merged;
 }
 
 function mergeArray(localArr, remoteArr) {
   const map = new Map();
-
-  // 先放本地
   for (const item of localArr) {
     if (item && item.id) map.set(item.id, item);
   }
-  // 再放远程：如果同 id，比较 updatedAt（或 createdAt）
   for (const item of remoteArr) {
     if (!item || !item.id) continue;
     const existing = map.get(item.id);
     if (!existing) {
       map.set(item.id, item);
     } else {
-      // 谁 updatedAt 大取谁（兼容无 updatedAt 的旧数据，回退 createdAt）
       const localTime = existing.updatedAt || existing.createdAt || 0;
       const remoteTime = item.updatedAt || item.createdAt || 0;
-      if (remoteTime >= localTime) {
-        map.set(item.id, item);
-      }
+      if (remoteTime >= localTime) map.set(item.id, item);
     }
   }
-
   return Array.from(map.values());
 }
 
-function mergeCategories(localCats, remoteCats) {
+// 合并墓碑：同名墓碑取 deletedAt 更近者
+function mergeTombstones(local, remote) {
+  const out = {};
+  for (const type of ['income', 'budget']) {
+    const map = new Map();
+    for (const t of (local?.[type] || [])) {
+      if (!t || !t.name) continue;
+      map.set(t.name, t);
+    }
+    for (const t of (remote?.[type] || [])) {
+      if (!t || !t.name) continue;
+      const existing = map.get(t.name);
+      if (!existing || (t.deletedAt || 0) > (existing.deletedAt || 0)) {
+        map.set(t.name, t);
+      }
+    }
+    out[type] = Array.from(map.values());
+  }
+  return out;
+}
+
+// 并集 → 用墓碑过滤
+function mergeCategoriesWithTombstone(localCats, remoteCats, tombstones) {
   const out = {};
   for (const type of ['income', 'budget']) {
     const set = new Set();
     (localCats?.[type] || []).forEach(c => set.add(c));
     (remoteCats?.[type] || []).forEach(c => set.add(c));
-    out[type] = Array.from(set);
+    // 用墓碑过滤：墓碑里有的类别 = 被删了
+    const deletedNames = new Set((tombstones?.[type] || []).map(t => t.name));
+    out[type] = Array.from(set).filter(c => !deletedNames.has(c));
   }
   return out;
 }
