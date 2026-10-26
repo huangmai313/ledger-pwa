@@ -38,11 +38,20 @@ function saveRaw(obj) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
 }
 
+// 默认类别
+const DEFAULT_INCOME_CATS = ['工资', '奖金', '兼职', '投资收益', '红包', '其他'];
+const DEFAULT_BUDGET_CATS = ['餐饮', '交通', '购物', '住房', '娱乐', '医疗', '教育', '通讯', '日常', '其他'];
+
 function ensureStructure(raw) {
   if (!raw) raw = {};
   if (!raw.incomes) raw.incomes = [];
   if (!raw.budgets) raw.budgets = [];
   if (!raw.reconciles) raw.reconciles = [];
+  if (!raw.categories) raw.categories = { income: [...DEFAULT_INCOME_CATS], budget: [...DEFAULT_BUDGET_CATS] };
+  else {
+    if (!raw.categories.income) raw.categories.income = [...DEFAULT_INCOME_CATS];
+    if (!raw.categories.budget) raw.categories.budget = [...DEFAULT_BUDGET_CATS];
+  }
   return raw;
 }
 
@@ -220,4 +229,36 @@ export function getMonthSummary(month) {
 export function fmtMoney(n) {
   const v = Number(n) || 0;
   return '¥' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// ============ 类别管理 ============
+// type: 'income' | 'budget'
+export function getCategories(type) {
+  return loadAll().categories[type] || [];
+}
+export function isInCategory(type, name) {
+  const cats = getCategories(type);
+  return cats.includes(name);
+}
+export function addCategory(type, name) {
+  name = name.trim();
+  if (!name) return false;
+  const data = loadAll();
+  if (!data.categories[type].includes(name)) {
+    data.categories[type].push(name);
+    saveAll(data);
+  }
+  return true;
+}
+export function deleteCategory(type, name) {
+  const data = loadAll();
+  data.categories[type] = data.categories[type].filter(c => c !== name);
+  saveAll(data);
+}
+// 自动把新类别加入 categories（保存时调用）
+export function autoAddCategory(type, name) {
+  const cats = getCategories(type);
+  if (name && !cats.includes(name)) {
+    addCategory(type, name);
+  }
 }

@@ -7,7 +7,8 @@ import {
   addIncome, updateIncome, deleteIncome,
   addBudget, updateBudget, deleteBudget,
   addReconcile, updateReconcile, deleteReconcile,
-  loadSettings, saveSettings
+  loadSettings, saveSettings,
+  getCategories, addCategory, deleteCategory, autoAddCategory
 } from './data.js';
 import { sync, createGist, isConfigured, syncStatus } from './gist.js';
 import { renderCharts, renderBudgetProgress } from './chart.js';
@@ -401,10 +402,14 @@ function openIncomeForm(data) {
   const isEdit = !!data;
   const d = data || { name: '', amount: '', date: new Date().toISOString().slice(0, 10), note: '' };
 
+  const incomeCats = getCategories('income');
+  const datalistId = 'dl_income';
+
   const body = `
     <div class="form-group">
-      <label class="form-label">收入名称</label>
-      <input class="form-input" id="f_name" value="${escapeHtml(d.name)}" placeholder="例如：工资、奖金">
+      <label class="form-label">收入类别</label>
+      <input class="form-input" id="f_name" list="${datalistId}" value="${escapeHtml(d.name)}" placeholder="选择或输入新类别" autocomplete="off">
+      <datalist id="${datalistId}">${incomeCats.map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
     </div>
     <div class="form-group">
       <label class="form-label">金额</label>
@@ -431,16 +436,16 @@ function openIncomeForm(data) {
   modal.querySelector('#saveBtn').onclick = () => {
     const name = modal.querySelector('#f_name').value.trim();
     const amount = parseFloat(modal.querySelector('#f_amount').value);
-    if (!name) return toast('请输入名称');
+    if (!name) return toast('请输入类别');
     if (!amount || amount <= 0) return toast('请输入有效金额');
 
     if (isEdit) {
       updateIncome(data.id, { name, amount, date: modal.querySelector('#f_date').value, note: modal.querySelector('#f_note').value.trim() });
-      toast('已保存');
     } else {
       addIncome({ name, amount, month: currentMonth, date: modal.querySelector('#f_date').value, note: modal.querySelector('#f_note').value.trim() });
-      toast('已添加');
     }
+    autoAddCategory('income', name);
+    toast(isEdit ? '已保存' : '已添加');
     close();
     renderAll();
   };
@@ -489,6 +494,8 @@ function openBudgetForm(idOrData, incomeId) {
 
   const isEdit = !!data.id;
   const allIncomes = getIncomesByMonth(data.month || currentMonth);
+  const budgetCats = getCategories('budget');
+  const datalistId = 'dl_budget';
 
   const body = `
     <div class="form-group">
@@ -498,8 +505,9 @@ function openBudgetForm(idOrData, incomeId) {
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">预算名称</label>
-      <input class="form-input" id="f_name" value="${escapeHtml(data.name)}" placeholder="例如：餐饮、交通">
+      <label class="form-label">预算类别</label>
+      <input class="form-input" id="f_name" list="${datalistId}" value="${escapeHtml(data.name)}" placeholder="选择或输入新类别" autocomplete="off">
+      <datalist id="${datalistId}">${budgetCats.map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
     </div>
     <div class="form-group">
       <label class="form-label">预算金额</label>
@@ -523,16 +531,16 @@ function openBudgetForm(idOrData, incomeId) {
     const name = modal.querySelector('#f_name').value.trim();
     const amount = parseFloat(modal.querySelector('#f_amount').value);
     const selectedIncomeId = modal.querySelector('#f_income').value;
-    if (!name) return toast('请输入名称');
+    if (!name) return toast('请输入类别');
     if (!amount || amount <= 0) return toast('请输入有效金额');
 
     if (isEdit) {
       updateBudget(data.id, { name, amount, incomeId: selectedIncomeId, note: modal.querySelector('#f_note').value.trim() });
-      toast('已保存');
     } else {
       addBudget({ name, amount, incomeId: selectedIncomeId, month: currentMonth, note: modal.querySelector('#f_note').value.trim() });
-      toast('已添加');
     }
+    autoAddCategory('budget', name);
+    toast(isEdit ? '已保存' : '已添加');
     close();
     renderAll();
   };
@@ -666,7 +674,36 @@ function openSettings() {
   const s = loadSettings();
   const configured = isConfigured();
 
+  const incomeCats = getCategories('income');
+  const budgetCats = getCategories('budget');
+
+  const categorySectionHtml = (title, type, cats) => `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:500;color:#374151;margin-bottom:8px;">${title}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" data-cat-type="${type}">
+        ${cats.map(c => `
+          <span class="cat-chip" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#EEF2FF;color:#4F46E5;border-radius:14px;font-size:12px;">
+            ${escapeHtml(c)}
+            <button class="cat-del" data-type="${type}" data-name="${escapeHtml(c)}" style="font-size:14px;line-height:1;color:#9CA3AF;padding:0 2px;">×</button>
+          </span>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input class="form-input cat-input" data-type="${type}" placeholder="添加新类别..." style="flex:1;padding:8px 12px;font-size:13px;">
+        <button class="btn btn-primary cat-add" data-type="${type}" style="padding:8px 14px;font-size:13px;flex:none;">+</button>
+      </div>
+    </div>
+  `;
+
   const body = `
+    <div class="settings-section">
+      <h3>类别管理</h3>
+      <div class="settings-card">
+        ${categorySectionHtml('收入类别', 'income', incomeCats)}
+        ${categorySectionHtml('预算类别', 'budget', budgetCats)}
+      </div>
+    </div>
+
     <div class="settings-section">
       <h3>云同步（GitHub Gist）</h3>
       <div class="settings-card">
@@ -721,6 +758,46 @@ function openSettings() {
   `;
 
   const { modal, close } = openModal({ title: '设置', body });
+
+  // 类别管理事件
+  modal.querySelectorAll('.cat-del').forEach(btn => {
+    btn.onclick = () => {
+      deleteCategory(btn.dataset.type, btn.dataset.name);
+      // 重新渲染类别区域
+      const type = btn.dataset.type;
+      const container = modal.querySelector(`[data-cat-type="${type}"]`);
+      const cats = getCategories(type);
+      container.innerHTML = cats.map(c => `
+        <span class="cat-chip" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#EEF2FF;color:#4F46E5;border-radius:14px;font-size:12px;">
+          ${escapeHtml(c)}
+          <button class="cat-del" data-type="${type}" data-name="${escapeHtml(c)}" style="font-size:14px;line-height:1;color:#9CA3AF;padding:0 2px;">×</button>
+        </span>
+      `).join('');
+      // 重新绑定删除按钮
+      modal.querySelectorAll('.cat-del').forEach(b => {
+        b.onclick = () => { deleteCategory(b.dataset.type, b.dataset.name); openSettings(); modal.remove(); };
+      });
+    };
+  });
+
+  const bindAddCategory = (input, btn) => {
+    const type = btn.dataset.type;
+    const doAdd = () => {
+      const val = input.value.trim();
+      if (!val) return;
+      addCategory(type, val);
+      input.value = '';
+      // 重新打开设置
+      modal.remove();
+      openSettings();
+    };
+    btn.onclick = doAdd;
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+  };
+  modal.querySelectorAll('.cat-add').forEach(btn => {
+    const input = modal.querySelector(`.cat-input[data-type="${btn.dataset.type}"]`);
+    bindAddCategory(input, btn);
+  });
 
   modal.querySelector('#s_save').onclick = async () => {
     const token = modal.querySelector('#s_token').value.trim();
