@@ -14,3 +14,10 @@ Thumbs.db
 # 构建产物（预留）
 node_modules/
 dist/
+
+# IDE 临时
+.trae-html-share-packages/
+.trae/
+
+# workflow 需要 workflow scope token 才能 push，暂时本地保留
+.github/workflows/
