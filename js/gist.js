@@ -2,7 +2,7 @@
 // 使用 GitHub Gist API 作为云端备份，实现多端同步
 // 同步策略：pull 时按 ID 双向合并（同 ID 取 updatedAt 更大者），绝不直接覆盖
 
-import { loadAll, saveAll, loadSettings } from './data.js';
+import { loadAll, saveAll, loadSettings, normalizeData } from './data.js';
 
 const API_BASE = 'https://api.github.com';
 const FILENAME = 'ledger-data.json';
@@ -180,6 +180,9 @@ export async function pullFromGist() {
       setStatus('success');
       return false;
     }
+
+    // 规范化远程数据（补齐缺失字段如 categories，避免合并时漏字段）
+    remoteData = normalizeData(remoteData);
 
     // 关键修复：按 ID 合并，而不是直接覆盖！
     const localData = loadAll();

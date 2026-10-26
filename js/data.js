@@ -55,6 +55,11 @@ function ensureStructure(raw) {
   return raw;
 }
 
+// 导出给 gist.js 用于规范化远程数据
+export function normalizeData(raw) {
+  return ensureStructure(raw);
+}
+
 export function loadAll() {
   return ensureStructure(loadRaw());
 }
