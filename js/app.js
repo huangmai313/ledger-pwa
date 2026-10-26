@@ -2,6 +2,7 @@
 import {
   getMonthKey, formatMonthLabel, shiftMonth, fmtMoney,
   getIncomesByMonth, getBudgetsByIncome, getReconcilesByBudget,
+  getBudgetById, getReconcileById, loadAll,
   getMonthSummary,
   addIncome, updateIncome, deleteIncome,
   addBudget, updateBudget, deleteBudget,
@@ -469,8 +470,6 @@ function openAddBudget(incomeId) {
   openBudgetForm(null, incomeId);
 }
 function openEditBudget(id) {
-  const budgets = getBudgetsByIncome(null).length ? null : null;
-  const all = []; // 简化，直接从全局数据里找
   openBudgetForm(id);
 }
 function openBudgetForm(idOrData, incomeId) {
@@ -479,8 +478,7 @@ function openBudgetForm(idOrData, incomeId) {
 
   if (typeof idOrData === 'string') {
     // 编辑模式
-    const all = JSON.parse(localStorage.getItem('ledger-pwa-data') || '{}');
-    data = all.budgets?.find(b => b.id === idOrData);
+    data = getBudgetById(idOrData);
     if (!data) return;
     parentIncomeId = data.incomeId;
   } else {
@@ -570,8 +568,7 @@ function openReconcileForm(idOrData, budgetId) {
   let data, parentBudgetId;
 
   if (typeof idOrData === 'string') {
-    const all = JSON.parse(localStorage.getItem('ledger-pwa-data') || '{}');
-    data = all.reconciles?.find(r => r.id === idOrData);
+    data = getReconcileById(idOrData);
     if (!data) return;
     parentBudgetId = data.budgetId;
   } else {
@@ -582,7 +579,7 @@ function openReconcileForm(idOrData, budgetId) {
   const isEdit = !!data.id;
 
   // 获取当前月所有预算（带收入名称）
-  const all = JSON.parse(localStorage.getItem('ledger-pwa-data') || '{}');
+  const all = loadAll();
   const budgets = (all.budgets || []).filter(b => b.month === (data.month || currentMonth));
   const incomes = all.incomes || [];
 
