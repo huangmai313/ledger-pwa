@@ -95,7 +95,8 @@ export function addIncome({ name, amount, month, note = '', date = new Date().to
     month,
     note,
     date,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   };
   data.incomes.push(item);
   saveAll(data);
@@ -105,26 +106,46 @@ export function updateIncome(id, patch) {
   const data = loadAll();
   const i = data.incomes.findIndex(x => x.id === id);
   if (i >= 0) {
-    data.incomes[i] = { ...data.incomes[i], ...patch };
+    data.incomes[i] = { ...data.incomes[i], ...patch, updatedAt: Date.now() };
     saveAll(data);
     return data.incomes[i];
   }
   return null;
 }
 export function deleteIncome(id) {
+  // 软删除！标记 deleted=true 并更新 updatedAt，让 merge 能传递删除状态
   const data = loadAll();
-  data.incomes = data.incomes.filter(x => x.id !== id);
-  // 级联删除子项
-  data.budgets = data.budgets.filter(b => b.incomeId !== id);
-  const budgetIds = data.budgets.map(b => b.id);
-  data.reconciles = data.reconciles.filter(r => !budgetIds.includes(r.budgetId));
+  const item = data.incomes.find(x => x.id === id);
+  if (item) {
+    item.deleted = true;
+    item.deletedAt = Date.now();
+    item.updatedAt = Date.now();
+  }
+  // 级联：预算和核销也软删除（它们的 updatedAt 也更新）
+  data.budgets.forEach(b => {
+    if (b.incomeId === id) {
+      b.deleted = true;
+      b.deletedAt = Date.now();
+      b.updatedAt = Date.now();
+    }
+  });
+  const deletedBudgetIds = new Set(data.budgets.filter(b => b.incomeId === id).map(b => b.id));
+  data.reconciles.forEach(r => {
+    if (deletedBudgetIds.has(r.budgetId)) {
+      r.deleted = true;
+      r.deletedAt = Date.now();
+      r.updatedAt = Date.now();
+    }
+  });
   saveAll(data);
 }
 export function getIncomesByMonth(month) {
-  return loadAll().incomes.filter(x => x.month === month).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return loadAll().incomes
+    .filter(x => x.month === month && !x.deleted)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 export function getIncomeById(id) {
-  return loadAll().incomes.find(x => x.id === id);
+  return loadAll().incomes.find(x => x.id === id && !x.deleted);
 }
 
 // ============ 预算（二级，归属收入） ============
@@ -137,7 +158,8 @@ export function addBudget({ name, amount, incomeId, month, note = '' }) {
     incomeId,
     month,
     note,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   };
   data.budgets.push(item);
   saveAll(data);
@@ -147,23 +169,36 @@ export function updateBudget(id, patch) {
   const data = loadAll();
   const i = data.budgets.findIndex(x => x.id === id);
   if (i >= 0) {
-    data.budgets[i] = { ...data.budgets[i], ...patch };
+    data.budgets[i] = { ...data.budgets[i], ...patch, updatedAt: Date.now() };
     saveAll(data);
     return data.budgets[i];
   }
   return null;
 }
 export function deleteBudget(id) {
+  // 软删除！
   const data = loadAll();
-  data.budgets = data.budgets.filter(x => x.id !== id);
-  data.reconciles = data.reconciles.filter(r => r.budgetId !== id);
+  const item = data.budgets.find(x => x.id === id);
+  if (item) {
+    item.deleted = true;
+    item.deletedAt = Date.now();
+    item.updatedAt = Date.now();
+  }
+  // 级联核销
+  data.reconciles.forEach(r => {
+    if (r.budgetId === id) {
+      r.deleted = true;
+      r.deletedAt = Date.now();
+      r.updatedAt = Date.now();
+    }
+  });
   saveAll(data);
 }
 export function getBudgetsByIncome(incomeId) {
-  return loadAll().budgets.filter(x => x.incomeId === incomeId);
+  return loadAll().budgets.filter(x => x.incomeId === incomeId && !x.deleted);
 }
 export function getBudgetById(id) {
-  return loadAll().budgets.find(x => x.id === id);
+  return loadAll().budgets.find(x => x.id === id && !x.deleted);
 }
 
 // ============ 核销（三级，归属预算） ============
@@ -177,7 +212,8 @@ export function addReconcile({ budgetId, amount, note = '', date = new Date().to
     note,
     date,
     month: budget ? budget.month : getMonthKey(),
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   };
   data.reconciles.push(item);
   saveAll(data);
@@ -187,30 +223,38 @@ export function updateReconcile(id, patch) {
   const data = loadAll();
   const i = data.reconciles.findIndex(x => x.id === id);
   if (i >= 0) {
-    data.reconciles[i] = { ...data.reconciles[i], ...patch };
+    data.reconciles[i] = { ...data.reconciles[i], ...patch, updatedAt: Date.now() };
     saveAll(data);
     return data.reconciles[i];
   }
   return null;
 }
 export function deleteReconcile(id) {
+  // 软删除！
   const data = loadAll();
-  data.reconciles = data.reconciles.filter(x => x.id !== id);
+  const item = data.reconciles.find(x => x.id === id);
+  if (item) {
+    item.deleted = true;
+    item.deletedAt = Date.now();
+    item.updatedAt = Date.now();
+  }
   saveAll(data);
 }
 export function getReconcilesByBudget(budgetId) {
-  return loadAll().reconciles.filter(x => x.budgetId === budgetId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return loadAll().reconciles
+    .filter(x => x.budgetId === budgetId && !x.deleted)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 export function getReconcileById(id) {
-  return loadAll().reconciles.find(x => x.id === id);
+  return loadAll().reconciles.find(x => x.id === id && !x.deleted);
 }
 
 // ============ 月度汇总 ============
 export function getMonthSummary(month) {
   const data = loadAll();
-  const incomes = data.incomes.filter(x => x.month === month);
-  const budgets = data.budgets.filter(x => x.month === month);
-  const reconciles = data.reconciles.filter(x => x.month === month);
+  const incomes = data.incomes.filter(x => x.month === month && !x.deleted);
+  const budgets = data.budgets.filter(x => x.month === month && !x.deleted);
+  const reconciles = data.reconciles.filter(x => x.month === month && !x.deleted);
 
   const totalIncome = incomes.reduce((s, x) => s + x.amount, 0);
   const totalBudget = budgets.reduce((s, x) => s + x.amount, 0);

@@ -1,5 +1,5 @@
 // Service Worker - 预算管家 PWA
-const CACHE_NAME = 'ledger-pwa-v4';
+const CACHE_NAME = 'ledger-pwa-v5';
 const PRECACHE_URLS = [
   './',
   './index.html',

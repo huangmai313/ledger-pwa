@@ -224,15 +224,12 @@ export async function pullFromGist() {
 
 // ============ 双向同步 ============
 // 流程：pull+merge → push 合并结果
+// 软删除（deleted=true）靠 updatedAt 自然传播，push-first 在多设备场景会覆盖远程数据
 export async function sync() {
   try {
-    // ===== 关键：先 push 再 pull =====
-    // 原因：如果本地删了一条，必须先把"不含这条的完整数据"推到远程，
-    // 这样后续 pull 就不会把远程那条 merge 回来（复活 bug）
-    await pushToGist();
-    // 再 pull 远程可能有的他人新增，按 ID 合并
+    // 先 pull：拉远程 + 按 ID/updatedAt 合并（软删除靠 updatedAt 近者胜自然传播）
     const pulled = await pullFromGist();
-    // pull 过程中 saveAll 了 merge 后的本地数据，再 push 一次确保远程最终一致
+    // 再 push：把合并后的完整数据推上去，远程最终一致
     await pushToGist();
     return pulled;
   } catch (err) {
